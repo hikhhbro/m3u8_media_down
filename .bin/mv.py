@@ -9,7 +9,7 @@ import shutil
 
 mv_data_json = {
     "activity": 0,
-    "sync" : 0,
+    "sync" : -1,
     "url_header":"https://www.kanxiz.com",
     "url":[]
 }
@@ -117,7 +117,7 @@ class mv :
             with open(self.mv_data_file(mv_name), 'r', encoding='utf-8') as f:
                 mv_data = json.load(f)
             start = mv_data["sync"]
-            for i in range(start,len(mv_data['url'])):
+            for i in range(start+1,len(mv_data['url'])):
                 cmd = "N_m3u8DL-CLI_v3.0.2.exe \"%s\" --enableDelAfterDone  --workDir \"%s\"  --saveName \"%s\" " %(mv_data['url'][i][1],self.root_dir ,mv_name + self.get_nid(mv_data['url'][i][0]))
                 
                 print(cmd)
