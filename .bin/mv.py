@@ -129,7 +129,6 @@ class mv :
                     
                     with open(self.mv_data_file(mv_name),'w',encoding='utf-8') as f:
                         json.dump(mv_data,f,indent=4, sort_keys=True,ensure_ascii=False)
-                break
         
             
             
