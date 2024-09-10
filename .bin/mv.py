@@ -28,9 +28,11 @@ class detail:
         if not os.path.exists(self.dir):
             os.mkdir(self.dir)
 
+        self.deficiencies = []
+
         self.data_file = self.dir + ".mv_data.json"
         self.data = self.data_form_json()
-        if not self.last_links:
+        if self.data["url"][-1]:
             self.last_links = self.data["url"][-1]
 
     def data_form_json(self):
@@ -43,6 +45,10 @@ class detail:
             data["url"].append(self.last_links)
         return data
 
+    def data_in_json(self):
+        with open(self.data_file, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=4, sort_keys=True, ensure_ascii=False)
+
     def set_activity(self, data):
         local = []
         for root, dirs, names in os.walk(self.dir):
@@ -51,17 +57,19 @@ class detail:
                 if name_spl[1] == ".mp4":
                     local.append(int(name_spl[0][name_spl[0].rfind("第") + 1 : -1]))
 
-        full_seq = list(range(1, data["sync"] + 1, 1))
+        if not local:
+            return
+
         local.sort()
+        full_seq = list(range(1, data["sync"] + 1, 1))
         dif = list(set(full_seq).difference(set(local)))
         if dif and dif[-1] + 1 != local[0]:
-            print("缺少%s" % (str(dif[local[0] - 1 :])))
-
+            self.deficiencies = dif[local[0] - 1 :]
         data["activity"] = local[0] - 1
 
     # 1. arg 给定参数,可能是链接和电源名字
     def set_name_and_lasturl(self, mv_name):
-
+        last_links = None
         if "http" in mv_name:
             mv_name, last_links = self.get_player_data(mv_name, fisrt=True)
 
@@ -70,9 +78,8 @@ class detail:
             exit(1)
 
         if not os.path.exists(mv_dir + mv_name + "/"):
+            # print("暂时不支持")
             pass  # seach from_web
-        else:
-            last_links = None
 
         return mv_name, last_links
 
@@ -89,65 +96,62 @@ class detail:
                     return [
                         mv_data_json["url_header"] + player_data["link_next"],
                         player_data["url_next"],
-                        False,
+                        None,
+                        player_data["nid"] + 1,
                     ]
                 else:
                     return player_data["vod_data"]["vod_name"], [
                         url,
                         player_data["url"],
-                        False,
+                        None,
+                        player_data["nid"],
                     ]
 
     def get_nid(self, url):
-        return "第" + url[url.rfind("-") + 1 : url.rfind(".")] + "集"
+        return "第" + str(url[3]) + "集"
 
     def sync_from_web(self):
         while True:
             self.last_links = self.get_player_data(self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
-                print(self.get_nid(self.last_links[0]), self.last_links)
+                print(self.get_nid(self.last_links), self.last_links)
             else:
                 break
+        self.data_in_json()
 
-        with open(self.data_file, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=4, sort_keys=True, ensure_ascii=False)
+    def add_download_list(self, url):
+        cmd = (
+            '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
+            % (
+                bin_dir,
+                url[1],
+                bin_dir,
+                self.name + self.get_nid(url),
+            )
+        )
+
+        print(cmd)
+        os.system(cmd)
+
+        return shutil.move(
+            bin_dir + "/" + self.name + self.get_nid(url) + ".mp4",
+            self.dir,
+        )
 
     def download(self):
-        start = self.data["sync"]
-        print(start, len(self.data["url"]))
-        for i in range(start, len(self.data["url"])):
-            if not self.data["url"][i][2]:
-                cmd = (
-                    '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
-                    % (
-                        bin_dir,
-                        self.data["url"][i][1],
-                        bin_dir,
-                        self.name + self.get_nid(self.data["url"][i][0]),
-                    )
-                )
-
-                print(cmd)
-
-                if not os.system(cmd):
-                    self.data["url"][i][2] = True
-                    self.data["sync"] = i + 1
-                    shutil.move(
-                        bin_dir
-                        + "/"
-                        + self.name
-                        + self.get_nid(self.data["url"][i][0])
-                        + ".mp4",
-                        self.dir,
-                    )
-
-                    with open(self.data_file, "w", encoding="utf-8") as f:
-                        json.dump(
-                            self.data, f, indent=4, sort_keys=True, ensure_ascii=False
-                        )
+        for url in self.data["url"]:
+            if not url[2]:
+                if not self.add_download_list(url):
+                    url[2] = True
+                    self.data["sync"] = url[3]
+                    self.data_in_json()
+            elif url[3] in self.deficiencies:
+                if self.add_download_list(url):
+                    self.deficiencies.remove(url[3])
             else:
-                print(self.get_nid(self.data["url"][i][0]), "已经下载,跳过")
+                # print(self.get_nid(url), "已经下载,跳过")
+                pass
 
 
 class mv:
@@ -213,16 +217,18 @@ class mv:
                 [
                     self.mv_list.index(mv_name),
                     mv_detail.name,
-                    str(mv_detail.data["sync"]) + "/" + str(len(mv_detail.data["url"])),
+                    str(mv_detail.data["sync"])
+                    + "/"
+                    + str(mv_detail.data["url"][-1][3]),
                     mv_detail.data["activity"],
-                    str(mv_detail.data["period"])[1:-1],
+                    str(mv_detail.deficiencies)[1:-1],
                 ]
             )
 
         print(
             tabulate(
                 data,
-                headers=["序号", "名字", "已下载/更新", "观看记录", "更新时间/周"],
+                headers=["序号", "名字", "已下载/更新", "观看记录", "缺少"],
                 tablefmt="grid",
             )
         )
