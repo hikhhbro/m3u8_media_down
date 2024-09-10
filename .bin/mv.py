@@ -5,153 +5,246 @@ import sys
 import os
 import re
 import shutil
+from tabulate import tabulate
 
 
 mv_data_json = {
-    "activity": 0,
-    "sync" : -1,
-    "url_header":"https://www.kanxiz.com",
-    "url":[]
+    "activity": 0,  # 观看记录
+    "sync": 0,  # 下载集数
+    "url_header": "https://www.kanxiz.com",  # 来源网站
+    "period": [],  # 更新时间,[1,5]表示每周一和周五跟新
+    "url": [],  # 视频资源链接
 }
 
-class mv :
-    def __init__(self,age) -> None:
-        self.mv_list = []
-        if os.path.exists("mv_list.json"):
-            with open("mv_list.json", 'r', encoding='utf-8') as f:
-                self.mv_list = json.load(f)
-                
-        self.mv_fun = {
-            'download': self.download,
-            'sync':self.sync
-        }
-        self.arg = self.age_parse(age)
-        self.root_dir = os.getcwd()
-        self.mv_dir  = os.path.dirname(self.root_dir) + '/'
-        
-    
-    
-    def mv_data_file(self,mv_name):
-        return self.mv_dir+ mv_name +  "/.mv_data.json"
-    
-    def mv_data_dir(self,mv_name):
-        return self.mv_dir + mv_name +  "/"
-    
-    def age_parse(self,arg):
-        if len(arg) == 1 and isinstance(arg[0],str):
-            if  'http' in arg[0]:
-                return ('sync',arg[0])      
-        elif len(arg) > 1:
-            return ('download',arg[1]) 
+bin_dir = os.path.dirname(os.path.abspath(__file__)) 
+mv_dir = os.path.dirname(bin_dir) + "/"
+
+
+class detail:
+    def __init__(self, mv_name):
+        self.name, self.last_links = self.set_name_and_lasturl(mv_name)
+
+        self.dir = mv_dir + self.name + "/"
+        if not os.path.exists(self.dir):
+            os.mkdir(self.dir)
+
+        self.data_file = self.dir + ".mv_data.json"
+        self.data = self.data_form_json()
+        if not self.last_links:
+            self.last_links = self.data["url"][-1]
+
+    def data_form_json(self):
+        if os.path.exists(self.data_file):
+            with open(self.data_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
         else:
-            print("参数错误")
-          
-    
-    def get_player_data(self,url,fisrt=False):
+            data = mv_data_json.copy()
+            data["url"].append(self.last_links) 
+        return data
+
+
+    # 1. arg 给定参数,可能是链接和电源名字
+    def set_name_and_lasturl(self, mv_name):
+        
+        if "http" in mv_name:
+            mv_name, last_links = self.get_player_data(mv_name, fisrt=True)
+
+        if not mv_name:
+            print("请输入正确的电源名字或链接")
+            exit(1)
+            
+        if  not os.path.exists(mv_dir + mv_name + "/"):
+            pass  # seach from_web
+        else :
+            last_links = None
+
+        return mv_name, last_links
+
+    def get_player_data(self, url, fisrt=False):
         response = requests.get(url)
-        response.raise_for_status() #检查请求是否成功
-        soup =  BeautifulSoup(response.text,'html.parser')
-        script_tags = soup.find_all('script')
+        response.raise_for_status()  # 检查请求是否成功
+        soup = BeautifulSoup(response.text, "html.parser")
+        script_tags = soup.find_all("script")
 
         for script in script_tags:
-            if 'var player_data' in script.text:
-                player_data = json.loads(script.text[len('var player_data='):])
+            if "var player_data" in script.text:
+                player_data = json.loads(script.text[len("var player_data=") :])
                 if not fisrt:
-                    return [mv_data_json['url_header'] + player_data["link_next"],player_data["url_next"],False]
+                    return [
+                        mv_data_json["url_header"] + player_data["link_next"],
+                        player_data["url_next"],
+                        False,
+                    ]
                 else:
-                    return player_data['vod_data']['vod_name'],[url,player_data["url"],False]
-                    
-                
-
-    def get_nid(self,url):
-        return "第" + url[url.rfind("-")+1:url.rfind(".")] + "集"
-    
-                    
-    
-    def sync(self,url):
-        print("sync:",url)
-        if  'http' in url:
-            mv_name,next_url = self.get_player_data(url,fisrt=True)
-            print(mv_name)
-            print(self.get_nid(next_url[0]),next_url)
-        else :
-            mv_name = url
-
+                    return player_data["vod_data"]["vod_name"], [
+                        url,
+                        player_data["url"],
+                        False,
+                    ]
+    def get_nid(self, url):
+            return "第" + url[url.rfind("-") + 1 : url.rfind(".")] + "集"
         
-        if mv_name not in self.mv_list:
-            self.mv_list.append(mv_name)
-            with open("mv_list.json",'+a',encoding='utf-8') as f:
-                json.dump(self.mv_list,f,ensure_ascii=False)
-            os.mkdir(mv_name)
-            mv_data = mv_data_json.copy()
-            mv_data['url'].append(next_url)
-        else :
-            if os.path.exists(self.mv_data_file(mv_name)):
-                with open(self.mv_data_file(mv_name), 'r', encoding='utf-8') as f:
-                    mv_data = json.load(f)
-                next_url = mv_data['url'][-1]
-            else:
-                mv_data = mv_data_json.copy()
-                mv_data['url'].append(next_url)
-
-        while True :
-            next_url = self.get_player_data(next_url[0])
-            if next_url[0] and next_url[1] :
-                mv_data['url'].append(next_url)
-                print(self.get_nid(next_url[0]),next_url)
+    def sync_from_web(self):
+        while True:
+            self.last_links = self.get_player_data(self.last_links[0])
+            if self.last_links[0] and self.last_links[1]:
+                self.data["url"].append(self.last_links)
+                print(self.get_nid(self.last_links[0]), self.last_links)
             else:
                 break
-        
-        # print(mv_data)
-        with open(self.mv_data_file(mv_name),'w',encoding='utf-8') as f:
-            json.dump(mv_data,f,indent=4, sort_keys=True,ensure_ascii=False)
-        
-        
-        
-        
             
-        
-        
-    def download(self,mv_name):
-        if os.path.exists(self.mv_data_file(mv_name)):
-            with open(self.mv_data_file(mv_name), 'r', encoding='utf-8') as f:
-                mv_data = json.load(f)
-            start = mv_data["sync"]
-            for i in range(start+1,len(mv_data['url'])):
-                cmd = "N_m3u8DL-CLI_v3.0.2.exe \"%s\" --enableDelAfterDone  --workDir \"%s\"  --saveName \"%s\" " %(mv_data['url'][i][1],self.root_dir ,mv_name + self.get_nid(mv_data['url'][i][0]))
-                
+        with open(self.data_file, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=4, sort_keys=True, ensure_ascii=False)
+            
+            
+            
+    def download(self):
+        start = self.data["sync"]
+        for i in range(start, len(self.data["url"])):
+            if not self.data["url"][i][2]:
+                cmd = (
+                    '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
+                    % (
+                        bin_dir,
+                        self.data["url"][i][1],
+                        bin_dir,
+                        self.name + self.get_nid(self.data["url"][i][0]),
+                    )
+                )
+
                 print(cmd)
-                
+
                 if not os.system(cmd):
-                    mv_data['url'][i][2] = True
-                    mv_data['sync'] = i
-                    shutil.move(mv_name + self.get_nid(mv_data['url'][i][0]) +'.mp4',self.mv_data_dir(mv_name))
-                    
-                    with open(self.mv_data_file(mv_name),'w',encoding='utf-8') as f:
-                        json.dump(mv_data,f,indent=4, sort_keys=True,ensure_ascii=False)
-        
+                    self.data["url"][i][2] = True
+                    self.data["sync"] = i
+                    shutil.move(
+                        bin_dir + '/' +  self.name + self.get_nid(self.data["url"][i][0]) + ".mp4",
+                        self.dir,
+                    )
+
+                    with open(
+                        self.data_file, "w", encoding="utf-8"
+                    ) as f:
+                        json.dump(
+                            self.data, f, indent=4, sort_keys=True, ensure_ascii=False
+                        )
+            else:
+                print(self.get_nid(self.data["url"][i][0]), "已经下载,跳过")
             
-            
-    def run(self):
-        self.mv_fun[self.arg[0]](self.arg[1])
         
 
+class mv:
+    def __init__(self):
 
-        
-        
-if __name__ == '__main__':
-    
-    if len(sys.argv) > 1:
-        m = mv(sys.argv[1:])
-        m.run()
-    else:
+        self.mv_fun = {
+            "show": self.show,
+            "sync": self.sync,
+            "--help": self.help,
+            "rm": self.rm,
+        }
+        self.mv_list = [
+            d
+            for d in os.listdir(mv_dir)
+            if os.path.isdir(os.path.join(mv_dir, d)) and d[0] != "."
+        ]
+
+    def arg_parse(self, arg):
+        short_opt = None
+        if len(arg) > 0:
+            if "-d" in arg:
+                short_opt = "-d"
+                arg.remove("-d")
+
+        if not arg:
+            arg = self.mv_list
+        return short_opt, arg
+
+    # 1. arg 给定参数,可能是链接和电源名字,或者通过show显示的序号
+    # 2. 获取电影名字和链接, 先从本地获取, 没有则从网页获取
+    # 3. 循环获取资源到最新状态
+    def sync(self, arg):
+        mv_name = None
+
+        # arg 剔除短选项后为空, 默认选择所有,则返回所有本地电影目录
+        short_opt, arg_list = self.arg_parse(arg)
+
+        for arg_ in arg_list:
+            if arg_.isdigit():
+                mv_name = self.mv_list[int(arg_)]
+            else:
+                mv_name = arg_
+
+            mv_datail = detail(mv_name)
+            print("%s更新:" %(mv_datail.name))
+            mv_datail.sync_from_web()
+            if short_opt == '-d':
+                print("%s下载:" %(mv_datail.name))
+                mv_datail.download()
+            print("-------------------")
+            
+
+    def show(self, arg):
+        data = []
+        for i in range(len(self.mv_list)):
+            mv_detail = detail(self.mv_list[i])
+            data.append(
+                [
+                    i,
+                    mv_detail.name,
+                    str(mv_detail.data["sync"]) + "/" + str(len(mv_detail.data["url"])),
+                    mv_detail.data["activity"],
+                    str(mv_detail.data["period"])[1:-1],
+                ]
+            )
+
+        print(
+            tabulate(
+                data,
+                headers=["序号", "名字", "已下载/更新", "观看记录", "更新时间/周"],
+                tablefmt="grid",
+            )
+        )
+
+    def help(self, arg):
         print("mv --help")
         print("linux:")
-        print("python3 mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html")
+        print(
+            "python3 mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
+        )
         print("python3 mv.py sync move_name, eg: sync 一世独尊")
         print("win:")
-        print("your_path/python3.exe mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html")
+        print(
+            "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
+        )
         print("your_path/python3.exe mv.py sync move_name, eg: sync 一世独尊")
-        print("tip: 创建新的动漫或电视剧,先给第一集的链接,自动抓取所有资源的m3u8资源后,在用sync下载所有视频资源")
+        print(
+            "tip: 创建新的动漫或电视剧,先给第一集的链接,自动抓取所有资源的m3u8资源后,在用sync下载所有视频资源"
+        )
         print("目前只支持看戏网")
-    
+
+    def rm(self, arg):
+        pass
+
+    # 1. 输入参数: 电源名称或者电源链接, 爬取电影视频的m3u8链接, 带上-d,爬取完之后同时下载
+    def run(self, arg):
+        opt = "--help"
+        sub_arg = None
+
+        if sys.argv[0] == arg[0]:
+            sub_arg = arg[1:]
+        else:
+            sub_arg = arg
+
+        if len(sub_arg) > 0:
+            if sub_arg[0] not in self.mv_fun.keys():
+                opt = "sync"
+            else:
+                opt = sub_arg[0]
+                del sub_arg[0]
+
+        self.mv_fun[opt](sub_arg)
+
+
+if __name__ == "__main__":
+
+    mv().run(sys.argv)
