@@ -6,7 +6,16 @@ import os
 import re
 import shutil
 from tabulate import tabulate
+import time
 
+
+mv_web = [
+    {
+        "name": "看戏网",
+        "base_url": "https://www.kanxiz.com",
+        "search": "https://www.kanxiz.com/search/-------------.html?wd=%s&submit=",
+    }
+]
 
 mv_data_json = {
     "activity": 0,  # 观看记录
@@ -71,26 +80,88 @@ class detail:
             self.deficiencies = dif[local[0] - 1 :]
         data["activity"] = local[0] - 1
 
+    def soup_from_web(self, url):
+        response = requests.get(url)
+        response.raise_for_status()  # 检查请求是否成功
+        return BeautifulSoup(response.text, "html.parser")
+
+    def get_1080p(self, url_json):
+        for key, value in url_json.items():
+            # cnt = [0,'']
+            for url in value[:]:
+                vodlist = self.soup_from_web(url).find(
+                    "div", class_="stui-vodlist__head"
+                )
+                if vodlist.text.find("红牛云") < 0:
+                    value.remove(url)
+                else:
+                    vodlist = self.soup_from_web(url).find_all(
+                        "div", class_="stui-vodlist__head"
+                    )
+                    # print(vodlist)
+                    for vod in vodlist:
+                        url_list = vod.find_all("a")
+                        for i in url_list:
+                            url = mv_web[0]["base_url"] + i.get("href")
+                            return url
+
+                        # if cnt_text:
+                        #     cnt_ = max([int(num) for num in re.findall(r'\d+', cnt_text.text)])
+                        #     if cnt[0] < cnt_:
+                        #         cnt[0] = cnt_
+                        #         if not cnt[1]:
+                        #             value.remove(url)
+
+                        #     print(cnt)
+                        #     print('------')
+                        # if vod.text.find("红牛云") > 0:
+                        #     vod
+
+    def search_from_web(self, name):
+        mv_name = None
+        last_links = None
+        ret_url = {}
+        url = mv_web[0]["search"] % name
+
+        response = requests.get(url)
+        response.raise_for_status()  # 检查请求是否成功
+        soup = BeautifulSoup(response.text, "html.parser")
+        ul = soup.find("ul", class_="stui-vodlist clearfix")
+        li = ul.find_all("a", class_="stui-vodlist__thumb lazyload")
+        for mv in li:
+            title = mv.get("title")
+            link = mv_web[0]["base_url"] + mv.get("href")
+            # count = re.findall(r'\d+', mv.text)
+            # if count :
+            #     count = int(count[0])
+            # else:
+            #     continue
+
+            if title not in ret_url.keys():
+                ret_url[title] = []
+
+            ret_url[title].append(link)
+
+        return self.get_player_data(self.get_1080p(ret_url), fisrt=True)
+
     # 1. arg 给定参数,可能是链接和电源名字
     def set_name_and_lasturl(self, mv_name):
         last_links = None
         if "http" in mv_name:
             mv_name, last_links = self.get_player_data(mv_name, fisrt=True)
 
+        elif not os.path.exists(mv_dir + mv_name + "/"):
+            mv_name, last_links = self.search_from_web(mv_name)
+
         if not mv_name:
             print("请输入正确的电源名字或链接")
             exit(1)
 
-        if not os.path.exists(mv_dir + mv_name + "/"):
-            # print("暂时不支持")
-            pass  # seach from_web
-
         return mv_name, last_links
 
     def get_player_data(self, url, fisrt=False):
-        response = requests.get(url)
-        response.raise_for_status()  # 检查请求是否成功
-        soup = BeautifulSoup(response.text, "html.parser")
+
+        soup = self.soup_from_web(url)
         script_tags = soup.find_all("script")
 
         for script in script_tags:
@@ -122,6 +193,7 @@ class detail:
                 print(self.get_nid(self.last_links), self.last_links)
             else:
                 break
+            time.sleep(1)
         self.data_in_json()
 
     def add_download_list(self, url):
@@ -137,20 +209,21 @@ class detail:
 
         print(cmd)
         os.system(cmd)
-
-        return shutil.move(
+        ds = shutil.move(
             bin_dir + "/" + self.name + self.get_nid(url) + ".mp4",
             self.dir,
         )
+        # print(ds)
+        return ds
 
     def download(self):
         for url in self.data["url"]:
             if not url[2]:
-                if not self.add_download_list(url):
-                    url[2] = True
-                    self.data["sync"] = url[3]
-                    self.data_in_json()
-            elif url[3] in self.deficiencies:
+                self.add_download_list(url)
+                url[2] = True
+                self.data["sync"] = url[3]
+                self.data_in_json()
+            elif url[3] in self.deficiencies[:]:
                 if self.add_download_list(url):
                     self.deficiencies.remove(url[3])
             else:
@@ -176,7 +249,7 @@ class mv:
     def arg_parse(self, arg):
         short_opt = None
         if len(arg) > 0:
-            if "-d" in arg:
+            if "-d" in arg[:]:
                 short_opt = "-d"
                 arg.remove("-d")
             if "-v" in arg:
@@ -220,19 +293,21 @@ class mv:
         for arg_ in arg_list:
             mv_name = self.name_from_arg(arg_)
             mv_detail = detail(mv_name)
+            
+            sync_rec = str(mv_detail.data["sync"]) + "/" + str(mv_detail.data["url"][-1][3]) + "/" + str(mv_detail.data["end"])
+                
+            if mv_detail.data["sync"] < mv_detail.data["url"][-1][3]:
+                sync_rec = '\033[34m' + sync_rec + '\033[0m'
+                
             l = [
                 self.mv_list.index(mv_name),
                 mv_detail.name,
-                str(mv_detail.data["sync"])
-                + "/"
-                + str(mv_detail.data["url"][-1][3])
-                + "/"
-                + str(mv_detail.data["end"]),
+                sync_rec,
                 mv_detail.data["activity"],
-                ','.join([f'{i}' for i in mv_detail.deficiencies])
+                ",".join([f"{i}" for i in mv_detail.deficiencies]),
             ]
             if short_opt == "-v":
-                l.append(','.join(mv_detail.data['period']))
+                l.append(",".join(mv_detail.data["period"]))
                 l.append(mv_detail.data_file)
             data.append(l)
 
