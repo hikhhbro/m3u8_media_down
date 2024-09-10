@@ -16,7 +16,7 @@ mv_data_json = {
     "url": [],  # 视频资源链接
 }
 
-bin_dir = os.path.dirname(os.path.abspath(__file__)) 
+bin_dir = os.path.dirname(os.path.abspath(__file__))
 mv_dir = os.path.dirname(bin_dir) + "/"
 
 
@@ -37,25 +37,41 @@ class detail:
         if os.path.exists(self.data_file):
             with open(self.data_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            self.set_activity(data)
         else:
             data = mv_data_json.copy()
-            data["url"].append(self.last_links) 
+            data["url"].append(self.last_links)
         return data
 
+    def set_activity(self, data):
+        local = []
+        for root, dirs, names in os.walk(self.dir):
+            for name in names:
+                name_spl = os.path.splitext(name)
+                if name_spl[1] == ".mp4":
+                    local.append(int(name_spl[0][name_spl[0].rfind("第") + 1 : -1]))
+
+        full_seq = list(range(1, data["sync"] + 1, 1))
+        local.sort()
+        dif = list(set(full_seq).difference(set(local)))
+        if dif and dif[-1] + 1 != local[0]:
+            print("缺少%s" % (str(dif[local[0] - 1 :])))
+
+        data["activity"] = local[0] - 1
 
     # 1. arg 给定参数,可能是链接和电源名字
     def set_name_and_lasturl(self, mv_name):
-        
+
         if "http" in mv_name:
             mv_name, last_links = self.get_player_data(mv_name, fisrt=True)
 
         if not mv_name:
             print("请输入正确的电源名字或链接")
             exit(1)
-            
-        if  not os.path.exists(mv_dir + mv_name + "/"):
+
+        if not os.path.exists(mv_dir + mv_name + "/"):
             pass  # seach from_web
-        else :
+        else:
             last_links = None
 
         return mv_name, last_links
@@ -81,9 +97,10 @@ class detail:
                         player_data["url"],
                         False,
                     ]
+
     def get_nid(self, url):
-            return "第" + url[url.rfind("-") + 1 : url.rfind(".")] + "集"
-        
+        return "第" + url[url.rfind("-") + 1 : url.rfind(".")] + "集"
+
     def sync_from_web(self):
         while True:
             self.last_links = self.get_player_data(self.last_links[0])
@@ -92,14 +109,13 @@ class detail:
                 print(self.get_nid(self.last_links[0]), self.last_links)
             else:
                 break
-            
+
         with open(self.data_file, "w", encoding="utf-8") as f:
             json.dump(self.data, f, indent=4, sort_keys=True, ensure_ascii=False)
-            
-            
-            
+
     def download(self):
         start = self.data["sync"]
+        print(start, len(self.data["url"]))
         for i in range(start, len(self.data["url"])):
             if not self.data["url"][i][2]:
                 cmd = (
@@ -116,22 +132,23 @@ class detail:
 
                 if not os.system(cmd):
                     self.data["url"][i][2] = True
-                    self.data["sync"] = i
+                    self.data["sync"] = i + 1
                     shutil.move(
-                        bin_dir + '/' +  self.name + self.get_nid(self.data["url"][i][0]) + ".mp4",
+                        bin_dir
+                        + "/"
+                        + self.name
+                        + self.get_nid(self.data["url"][i][0])
+                        + ".mp4",
                         self.dir,
                     )
 
-                    with open(
-                        self.data_file, "w", encoding="utf-8"
-                    ) as f:
+                    with open(self.data_file, "w", encoding="utf-8") as f:
                         json.dump(
                             self.data, f, indent=4, sort_keys=True, ensure_ascii=False
                         )
             else:
                 print(self.get_nid(self.data["url"][i][0]), "已经下载,跳过")
-            
-        
+
 
 class mv:
     def __init__(self):
@@ -159,6 +176,13 @@ class mv:
             arg = self.mv_list
         return short_opt, arg
 
+    def name_from_arg(self, arg):
+        if arg.isdigit():
+            mv_name = self.mv_list[int(arg)]
+        else:
+            mv_name = arg
+        return mv_name
+
     # 1. arg 给定参数,可能是链接和电源名字,或者通过show显示的序号
     # 2. 获取电影名字和链接, 先从本地获取, 没有则从网页获取
     # 3. 循环获取资源到最新状态
@@ -169,27 +193,25 @@ class mv:
         short_opt, arg_list = self.arg_parse(arg)
 
         for arg_ in arg_list:
-            if arg_.isdigit():
-                mv_name = self.mv_list[int(arg_)]
-            else:
-                mv_name = arg_
+            mv_name = self.name_from_arg(arg_)
 
             mv_datail = detail(mv_name)
-            print("%s更新:" %(mv_datail.name))
+            print("%s更新:" % (mv_datail.name))
             mv_datail.sync_from_web()
-            if short_opt == '-d':
-                print("%s下载:" %(mv_datail.name))
+            if short_opt == "-d":
+                print("%s下载:" % (mv_datail.name))
                 mv_datail.download()
             print("-------------------")
-            
 
     def show(self, arg):
         data = []
-        for i in range(len(self.mv_list)):
-            mv_detail = detail(self.mv_list[i])
+        short_opt, arg_list = self.arg_parse(arg)
+        for arg_ in arg_list:
+            mv_name = self.name_from_arg(arg_)
+            mv_detail = detail(mv_name)
             data.append(
                 [
-                    i,
+                    self.mv_list.index(mv_name),
                     mv_detail.name,
                     str(mv_detail.data["sync"]) + "/" + str(len(mv_detail.data["url"])),
                     mv_detail.data["activity"],
