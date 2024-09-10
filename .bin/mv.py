@@ -13,6 +13,7 @@ mv_data_json = {
     "sync": 0,  # 下载集数
     "url_header": "https://www.kanxiz.com",  # 来源网站
     "period": [],  # 更新时间,[1,5]表示每周一和周五跟新
+    "end": 0,  # 完结集数
     "url": [],  # 视频资源链接
 }
 
@@ -34,6 +35,9 @@ class detail:
         self.data = self.data_form_json()
         if self.data["url"][-1]:
             self.last_links = self.data["url"][-1]
+
+        # self.data['end'] = 0
+        # self.data_in_json()
 
     def data_form_json(self):
         if os.path.exists(self.data_file):
@@ -175,6 +179,9 @@ class mv:
             if "-d" in arg:
                 short_opt = "-d"
                 arg.remove("-d")
+            if "-v" in arg:
+                short_opt = "-v"
+                arg.remove("-v")
 
         if not arg:
             arg = self.mv_list
@@ -213,22 +220,30 @@ class mv:
         for arg_ in arg_list:
             mv_name = self.name_from_arg(arg_)
             mv_detail = detail(mv_name)
-            data.append(
-                [
-                    self.mv_list.index(mv_name),
-                    mv_detail.name,
-                    str(mv_detail.data["sync"])
-                    + "/"
-                    + str(mv_detail.data["url"][-1][3]),
-                    mv_detail.data["activity"],
-                    str(mv_detail.deficiencies)[1:-1],
-                ]
-            )
+            l = [
+                self.mv_list.index(mv_name),
+                mv_detail.name,
+                str(mv_detail.data["sync"])
+                + "/"
+                + str(mv_detail.data["url"][-1][3])
+                + "/"
+                + str(mv_detail.data["end"]),
+                mv_detail.data["activity"],
+                ','.join([f'{i}' for i in mv_detail.deficiencies])
+            ]
+            if short_opt == "-v":
+                l.append(','.join(mv_detail.data['period']))
+                l.append(mv_detail.data_file)
+            data.append(l)
 
+        h = ["序号", "名字", "已下载/更新", "观看记录", "缺少"]
+        if short_opt == "-v":
+            h.append("更新时间/周")
+            h.append("配置文件")
         print(
             tabulate(
                 data,
-                headers=["序号", "名字", "已下载/更新", "观看记录", "缺少"],
+                headers=h,
                 tablefmt="grid",
             )
         )
