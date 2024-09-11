@@ -39,6 +39,7 @@ class detail:
             os.mkdir(self.dir)
 
         self.deficiencies = []
+        self.fail_retries = 10
 
         self.data_file = self.dir + ".mv_data.json"
         self.data = self.data_form_json()
@@ -81,8 +82,15 @@ class detail:
         data["activity"] = local[0] - 1
 
     def soup_from_web(self, url):
-        response = requests.get(url)
-        response.raise_for_status()  # 检查请求是否成功
+        while self.fail_retries:
+            try:
+                response = requests.get(url)
+                response.raise_for_status()  # 检查请求是否成功
+                break
+            except :
+                self.fail_retries  = self.fail_retries-1
+                print("失败重试 %s次" %(10 - self.fail_retries))
+
         return BeautifulSoup(response.text, "html.parser")
 
     def get_1080p(self, url_json):
@@ -193,7 +201,6 @@ class detail:
                 print(self.get_nid(self.last_links), self.last_links)
             else:
                 break
-            time.sleep(1)
         self.data_in_json()
 
     def add_download_list(self, url):
