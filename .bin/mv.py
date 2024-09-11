@@ -131,9 +131,7 @@ class detail:
         ret_url = {}
         url = mv_web[0]["search"] % name
 
-        response = requests.get(url)
-        response.raise_for_status()  # 检查请求是否成功
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = self.soup_from_web(url)
         ul = soup.find("ul", class_="stui-vodlist clearfix")
         li = ul.find_all("a", class_="stui-vodlist__thumb lazyload")
         for mv in li:
@@ -336,12 +334,12 @@ class mv:
         print(
             "python3 mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
         )
-        print("python3 mv.py sync move_name, eg: sync 一世独尊")
+        print("python3 mv.py sync movie_name, eg: sync 一世独尊")
         print("win:")
         print(
             "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
         )
-        print("your_path/python3.exe mv.py sync move_name, eg: sync 一世独尊")
+        print("your_path/python3.exe mv.py sync movie_name, eg: sync 一世独尊")
         print(
             "tip: 创建新的动漫或电视剧,先给第一集的链接,自动抓取所有资源的m3u8资源后,在用sync下载所有视频资源"
         )
