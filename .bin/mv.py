@@ -7,7 +7,8 @@ import re
 import shutil
 from tabulate import tabulate
 import time
-
+from collections import OrderedDict
+from inputimeout import inputimeout, TimeoutOccurred
 
 mv_web = [
     {
@@ -31,6 +32,8 @@ mv_dir = os.path.dirname(bin_dir) + "/"
 
 
 class detail:
+    fail_retries = 10
+
     def __init__(self, mv_name):
         self.name, self.last_links = self.set_name_and_lasturl(mv_name)
 
@@ -39,8 +42,6 @@ class detail:
             os.mkdir(self.dir)
 
         self.deficiencies = []
-        self.fail_retries = 10
-
         self.data_file = self.dir + ".mv_data.json"
         self.data = self.data_form_json()
         if self.data["url"][-1]:
@@ -72,6 +73,7 @@ class detail:
                     local.append(int(name_spl[0][name_spl[0].rfind("第") + 1 : -1]))
 
         if not local:
+            data["activity"] = data["sync"]
             return
 
         local.sort()
@@ -82,48 +84,53 @@ class detail:
         data["activity"] = local[0] - 1
 
     def soup_from_web(self, url):
-        while self.fail_retries:
+        retry = self.fail_retries
+        while retry:
             try:
-                response = requests.get(url)
+                response = requests.get(url, timeout=5)
                 response.raise_for_status()  # 检查请求是否成功
+                retry = self.fail_retries
                 break
-            except :
-                self.fail_retries  = self.fail_retries-1
-                print("失败重试 %s次" %(10 - self.fail_retries))
+            except:
+                retry = retry - 1
+                print("失败重试 %s次" % (10 - retry))
 
         return BeautifulSoup(response.text, "html.parser")
 
     def get_1080p(self, url_json):
+        # {
+        #     "神印王座2022":(url,count)
+        # }
+        ret_1080p = OrderedDict()
+        print("搜索相关结果:")
+        print("序号".ljust(3, "　") + "名称".ljust(15, "　") + "更新".rjust(4, "　"))
+        i = 0
         for key, value in url_json.items():
-            # cnt = [0,'']
-            for url in value[:]:
-                vodlist = self.soup_from_web(url).find(
-                    "div", class_="stui-vodlist__head"
+            count = 0
+            for url in value:
+                h4s = self.soup_from_web(url).find_all("h4")
+                for h4 in h4s:
+                    if "红牛云" in h4.text:
+                        li = (
+                            h4.find_parent("div")
+                            .find("ul", class_="stui-content__playlist clearfix")
+                            .find_all("a")
+                        )
+                        if len(li) > count:
+                            count = len(li)
+                            ret_1080p[key] = (
+                                mv_web[0]["base_url"] + li[0].get("href"),
+                                count,
+                            )
+
+            if key in ret_1080p.keys():
+                print(
+                    str(i).ljust(3, "　")
+                    + key.ljust(15, "　")
+                    + str(ret_1080p[key][1]).rjust(4, "　")
                 )
-                if vodlist.text.find("红牛云") < 0:
-                    value.remove(url)
-                else:
-                    vodlist = self.soup_from_web(url).find_all(
-                        "div", class_="stui-vodlist__head"
-                    )
-                    # print(vodlist)
-                    for vod in vodlist:
-                        url_list = vod.find_all("a")
-                        for i in url_list:
-                            url = mv_web[0]["base_url"] + i.get("href")
-                            return url
-
-                        # if cnt_text:
-                        #     cnt_ = max([int(num) for num in re.findall(r'\d+', cnt_text.text)])
-                        #     if cnt[0] < cnt_:
-                        #         cnt[0] = cnt_
-                        #         if not cnt[1]:
-                        #             value.remove(url)
-
-                        #     print(cnt)
-                        #     print('------')
-                        # if vod.text.find("红牛云") > 0:
-                        #     vod
+                i = i + 1
+        return ret_1080p
 
     def search_from_web(self, name):
         mv_name = None
@@ -137,18 +144,25 @@ class detail:
         for mv in li:
             title = mv.get("title")
             link = mv_web[0]["base_url"] + mv.get("href")
-            # count = re.findall(r'\d+', mv.text)
-            # if count :
-            #     count = int(count[0])
-            # else:
-            #     continue
-
             if title not in ret_url.keys():
                 ret_url[title] = []
 
             ret_url[title].append(link)
+        ret_url = self.get_1080p(ret_url)
+        select_key = next(iter(ret_url))
+        try:
+            c = inputimeout(
+                prompt="可输入序号或者名字,30s超时或回车默认第一个:", timeout=30
+            )
+            if c.isdigit():
+                select_key, value = list(ret_url.items())[int(c)]
+            elif c != "":
+                select_key = c
 
-        return self.get_player_data(self.get_1080p(ret_url), fisrt=True)
+        except TimeoutOccurred:
+            # print("超时选择默认")
+            pass
+        return self.get_player_data(ret_url[select_key][0], fisrt=True)
 
     # 1. arg 给定参数,可能是链接和电源名字
     def set_name_and_lasturl(self, mv_name):
@@ -191,13 +205,17 @@ class detail:
     def get_nid(self, url):
         return "第" + str(url[3]) + "集"
 
-    def sync_from_web(self):
+    def sync_from_web(self, count=sys.maxsize):
+        c = 1
         while True:
             self.last_links = self.get_player_data(self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
                 print(self.get_nid(self.last_links), self.last_links)
             else:
+                break
+            c = c + 1
+            if c >= count:
                 break
         self.data_in_json()
 
@@ -244,12 +262,31 @@ class mv:
             "sync": self.sync,
             "--help": self.help,
             "rm": self.rm,
+            "set": self.set,
         }
-        self.mv_list = [
+        local_mv = [
             d
             for d in os.listdir(mv_dir)
             if os.path.isdir(os.path.join(mv_dir, d)) and d[0] != "."
         ]
+        self.mv_json_path = bin_dir + "/" + ".mv.json"
+        mv_json = []
+        if os.path.exists(self.mv_json_path):
+            with open(self.mv_json_path, "r", encoding="utf-8") as f:
+                mv_json = json.load(f)
+        self.hot_mv = [item for item in mv_json if item in local_mv]
+        mv_json = self.hot_mv.copy()
+        if self.hot_mv != mv_json:
+            with open(self.mv_json_path, "w", encoding="utf-8") as f:
+                json.dump(self.hot_mv, f, indent=4, sort_keys=True, ensure_ascii=False)
+
+        mv_json.extend(local_mv)
+
+        self.mv_list = list(OrderedDict.fromkeys(mv_json))
+
+        self.end_dir = bin_dir + "/end"
+        if not os.path.exists(self.end_dir):
+            os.mkdir(self.end_dir)
 
     def arg_parse(self, arg):
         short_opt = None
@@ -260,6 +297,14 @@ class mv:
             if "-v" in arg:
                 short_opt = "-v"
                 arg.remove("-v")
+
+            if "-s" in arg:
+                short_opt = "-s"
+                arg.remove("-s")
+
+            if "-t" in arg:
+                short_opt = "-s"
+                arg.remove("-s")
 
         if not arg:
             arg = self.mv_list
@@ -295,31 +340,54 @@ class mv:
     def show(self, arg):
         data = []
         short_opt, arg_list = self.arg_parse(arg)
+        show_de = False
         for arg_ in arg_list:
             mv_name = self.name_from_arg(arg_)
             mv_detail = detail(mv_name)
-            
-            sync_rec = str(mv_detail.data["sync"]) + "/" + str(mv_detail.data["url"][-1][3]) + "/" + str(mv_detail.data["end"])
-                
+
+            if short_opt == "-s":
+                mv_detail.data_in_json()
+
+            sync_rec = (
+                str(mv_detail.data["activity"])
+                + "/"
+                + str(mv_detail.data["sync"])
+                + "/"
+                + str(mv_detail.data["url"][-1][3])
+                + "/"
+                + str(mv_detail.data["end"])
+            )
+
             if mv_detail.data["sync"] < mv_detail.data["url"][-1][3]:
-                sync_rec = '\033[34m' + sync_rec + '\033[0m'
-                
-            l = [
-                self.mv_list.index(mv_name),
-                mv_detail.name,
-                sync_rec,
-                mv_detail.data["activity"],
-                ",".join([f"{i}" for i in mv_detail.deficiencies]),
-            ]
+                sync_rec = "\033[34m" + sync_rec + "\033[0m"
+            if mv_detail.name in self.hot_mv:
+                name_ = "\033[91m" + mv_detail.name + "\033[0m"
+            else:
+                name_ = mv_detail.name
+
+            l = [self.mv_list.index(mv_name), name_, sync_rec]
+            if mv_detail.deficiencies:
+                show_de = True
+
             if short_opt == "-v":
                 l.append(",".join(mv_detail.data["period"]))
                 l.append(mv_detail.data_file)
+
+            l.append(",".join([f"{i}" for i in mv_detail.deficiencies]))
             data.append(l)
 
-        h = ["序号", "名字", "已下载/更新", "观看记录", "缺少"]
+        h = ["序号", "名字", "观看记录/已下载/更新/全集"]
+
         if short_opt == "-v":
             h.append("更新时间/周")
             h.append("配置文件")
+
+        if show_de:
+            h.append("缺少")
+        else:
+            for row in data:
+                row.pop()
+
         print(
             tabulate(
                 data,
@@ -327,6 +395,13 @@ class mv:
                 tablefmt="grid",
             )
         )
+
+    def set(self, arg):
+        print(arg[0])
+        if arg[0] in self.mv_list and arg[0] not in self.hot_mv:
+            self.hot_mv.append(arg[0])
+            with open(self.mv_json_path, "w", encoding="utf-8") as f:
+                json.dump(self.hot_mv, f, indent=4, sort_keys=True, ensure_ascii=False)
 
     def help(self, arg):
         print("mv --help")
@@ -346,7 +421,8 @@ class mv:
         print("目前只支持看戏网")
 
     def rm(self, arg):
-        pass
+        if arg[0] in self.mv_list:
+            shutil.move(mv_dir + "/" + arg[0], self.end_dir + "/" + arg[0])
 
     # 1. 输入参数: 电源名称或者电源链接, 爬取电影视频的m3u8链接, 带上-d,爬取完之后同时下载
     def run(self, arg):
