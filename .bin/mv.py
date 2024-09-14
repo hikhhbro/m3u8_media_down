@@ -49,6 +49,26 @@ class detail:
 
         # self.data['end'] = 0
         # self.data_in_json()
+        
+        self.lock_path = self.dir + '/' + '.lock'
+        
+    def lock(self,lock_text):
+        if not os.path.exists(self.lock_path):    
+            with open(self.lock_path, "w", encoding="utf-8") as f:
+                json.dump(lock_text, f, indent=4, sort_keys=True, ensure_ascii=False)
+            return True
+        else:
+            return False
+            
+    def unlock(self):
+        os.remove(self.lock_path)
+    
+    def get_lock(self):
+        if os.path.exists(self.lock_path):
+            with open(self.data_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        else:
+            return None
 
     def data_form_json(self):
         if os.path.exists(self.data_file):
@@ -93,7 +113,7 @@ class detail:
                 break
             except:
                 retry = retry - 1
-                print("失败重试 %s次" % (10 - retry))
+                print("\033[91m失败重试: %s/%s\033[0m" % (10 - retry,retry))
 
         return BeautifulSoup(response.text, "html.parser")
 
@@ -207,6 +227,9 @@ class detail:
 
     def sync_from_web(self, count=sys.maxsize):
         c = 1
+        if not self.lock({"sync":-1}):
+            print("其他进程正在更新,跳过")
+            return
         while True:
             self.last_links = self.get_player_data(self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
@@ -218,8 +241,12 @@ class detail:
             if c >= count:
                 break
         self.data_in_json()
+        self.unlock()
 
     def add_download_list(self, url):
+        if not self.lock({"download":url[3]}):
+            print("其他进程正在下载,跳过")
+            return
         cmd = (
             '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
             % (
@@ -236,6 +263,10 @@ class detail:
             bin_dir + "/" + self.name + self.get_nid(url) + ".mp4",
             self.dir,
         )
+        url[2] = True
+        self.data["sync"] = url[3]
+        self.data_in_json()
+        self.unlock()
         # print(ds)
         return ds
 
@@ -243,9 +274,6 @@ class detail:
         for url in self.data["url"]:
             if not url[2]:
                 self.add_download_list(url)
-                url[2] = True
-                self.data["sync"] = url[3]
-                self.data_in_json()
             elif url[3] in self.deficiencies[:]:
                 if self.add_download_list(url):
                     self.deficiencies.remove(url[3])
@@ -364,8 +392,14 @@ class mv:
                 name_ = "\033[91m" + mv_detail.name + "\033[0m"
             else:
                 name_ = mv_detail.name
-
-            l = [self.mv_list.index(mv_name), name_, sync_rec]
+            
+            action = mv_detail.get_lock()
+            if action :
+                seq_str = "* " + str(self.mv_list.index(mv_name))
+            else:
+                seq_str = str(self.mv_list.index(mv_name))
+            
+            l = [seq_str, name_, sync_rec]
             if mv_detail.deficiencies:
                 show_de = True
 
