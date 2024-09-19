@@ -9,6 +9,7 @@ from tabulate import tabulate
 import time
 from collections import OrderedDict
 from inputimeout import inputimeout, TimeoutOccurred
+import concurrent.futures
 
 mv_web = [
     {
@@ -29,7 +30,7 @@ mv_data_json = {
 
 bin_dir = os.path.dirname(os.path.abspath(__file__))
 mv_dir = os.path.dirname(bin_dir) + "/"
-
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
 class detail:
     fail_retries = 10
@@ -113,7 +114,7 @@ class detail:
                 break
             except:
                 retry = retry - 1
-                print("\033[91m失败重试: %s/%s\033[0m" % (10 - retry,retry))
+                print("\033[91m失败重试: %s/%s\033[0m" % (10 - retry,self.fail_retries))
 
         return BeautifulSoup(response.text, "html.parser")
 
@@ -226,10 +227,6 @@ class detail:
         return "第" + str(url[3]) + "集"
 
     def sync_from_web(self, count=sys.maxsize):
-        c = 1
-        if not self.lock({"sync":-1}):
-            print("其他进程正在更新,跳过")
-            return
         while True:
             self.last_links = self.get_player_data(self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
@@ -237,16 +234,11 @@ class detail:
                 print(self.get_nid(self.last_links), self.last_links)
             else:
                 break
-            c = c + 1
-            if c >= count:
-                break
         self.data_in_json()
-        self.unlock()
 
     def add_download_list(self, url):
-        if not self.lock({"download":url[3]}):
-            print("其他进程正在下载,跳过")
-            return
+
+
         cmd = (
             '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
             % (
@@ -266,14 +258,12 @@ class detail:
         url[2] = True
         self.data["sync"] = url[3]
         self.data_in_json()
-        self.unlock()
-        # print(ds)
         return ds
 
     def download(self):
         for url in self.data["url"]:
             if not url[2]:
-                self.add_download_list(url)
+                executor.submit(self.add_download_list,url)
             elif url[3] in self.deficiencies[:]:
                 if self.add_download_list(url):
                     self.deficiencies.remove(url[3])
@@ -364,6 +354,7 @@ class mv:
                 print("%s下载:" % (mv_datail.name))
                 mv_datail.download()
             print("-------------------")
+        executor.shutdown(wait=True)
 
     def show(self, arg):
         data = []
