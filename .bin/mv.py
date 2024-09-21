@@ -183,6 +183,7 @@ class detail:
         except TimeoutOccurred:
             # print("超时选择默认")
             pass
+        self.name = select_key
         return self.get_player_data(ret_url[select_key][0], fisrt=True)
 
     # 1. arg 给定参数,可能是链接和电源名字
@@ -216,7 +217,11 @@ class detail:
                         player_data["nid"] + 1,
                     ]
                 else:
-                    return player_data["vod_data"]["vod_name"], [
+                    if "vod_data" in player_data.keys():
+                        name = player_data["vod_data"]["vod_name"]
+                    else:
+                        name = self.name
+                    return name , [
                         url,
                         player_data["url"],
                         None,
@@ -227,11 +232,13 @@ class detail:
         return "第" + str(url[3]) + "集"
 
     def sync_from_web(self, count=sys.maxsize):
-        while True:
+        i = 1
+        while i < count:
             self.last_links = self.get_player_data(self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
                 print(self.get_nid(self.last_links), self.last_links)
+                i = i + 1
             else:
                 break
         self.data_in_json()
@@ -323,6 +330,12 @@ class mv:
             if "-t" in arg:
                 short_opt = "-s"
                 arg.remove("-s")
+            
+            if "-c" in arg:
+                short_opt = arg[-1]
+                arg.remove("-c")
+                del arg[-1] 
+            
 
         if not arg:
             arg = self.mv_list
@@ -343,13 +356,17 @@ class mv:
 
         # arg 剔除短选项后为空, 默认选择所有,则返回所有本地电影目录
         short_opt, arg_list = self.arg_parse(arg)
-
+        if short_opt and short_opt.isdigit():
+            count = int(short_opt)
+            short_opt = '-d'
+        else:
+            count=sys.maxsize
         for arg_ in arg_list:
             mv_name = self.name_from_arg(arg_)
 
             mv_datail = detail(mv_name)
             print("%s更新:" % (mv_datail.name))
-            mv_datail.sync_from_web()
+            mv_datail.sync_from_web(count)
             if short_opt == "-d":
                 print("%s下载:" % (mv_datail.name))
                 mv_datail.download()
