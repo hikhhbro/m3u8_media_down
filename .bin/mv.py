@@ -112,6 +112,8 @@ class detail:
                 response.raise_for_status()  # 检查请求是否成功
                 retry = self.fail_retries
                 break
+            except KeyboardInterrupt:
+                exit(1)
             except:
                 retry = retry - 1
                 print("\033[91m失败重试: %s/%s\033[0m" % (10 - retry,self.fail_retries))
@@ -263,7 +265,8 @@ class detail:
             self.dir,
         )
         url[2] = True
-        self.data["sync"] = url[3]
+        if self.data["sync"] < url[3] : 
+            self.data["sync"] = url[3]
         self.data_in_json()
         return ds
 
@@ -392,6 +395,7 @@ class mv:
                 + str(mv_detail.data["url"][-1][3])
                 + "/"
                 + str(mv_detail.data["end"])
+                + "("  + str(mv_detail.data["url"][-1][3] - mv_detail.data["activity"]) + ")"
             )
 
             if mv_detail.data["sync"] < mv_detail.data["url"][-1][3]:
@@ -439,7 +443,6 @@ class mv:
         )
 
     def set(self, arg):
-        print(arg[0])
         if arg[0] in self.mv_list and arg[0] not in self.hot_mv:
             self.hot_mv.append(arg[0])
             with open(self.mv_json_path, "w", encoding="utf-8") as f:
