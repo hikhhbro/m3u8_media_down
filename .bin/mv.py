@@ -14,19 +14,29 @@ import concurrent.futures
 mv_web = [
     {
         "name": "看戏网",
-        "base_url": "https://www.kanxiz.com",
-        "search": "https://www.kanxiz.com/search/-------------.html?wd=%s&submit=",
+        "base_url": "https://www.ikanxi.com",
+        "search": "https://www.ikanxi.com/search/-------------.html?wd=%s&submit=",
     }
 ]
 
 mv_data_json = {
     "activity": 0,  # 观看记录
     "sync": 0,  # 下载集数
-    "url_header": "https://www.kanxiz.com",  # 来源网站
+    "url_header": "https://www.ikanxi.com",  # 来源网站
     "period": [],  # 更新时间,[1,5]表示每周一和周五跟新
     "end": 0,  # 完结集数
     "url": [],  # 视频资源链接
 }
+
+def create_mv_data_json(web_name):
+    data = mv_data_json.copy()
+    for web in mv_web:
+        if web["name"] in web_name :
+            data["url_header"] = web["base_url"]
+        else :
+            print("%s 不支持" %(web_name))
+            exit(1)
+    return 
 
 bin_dir = os.path.dirname(os.path.abspath(__file__))
 mv_dir = os.path.dirname(bin_dir) + "/"
@@ -213,7 +223,7 @@ class detail:
                 player_data = json.loads(script.text[len("var player_data=") :])
                 if not fisrt:
                     return [
-                        mv_data_json["url_header"] + player_data["link_next"],
+                        player_data["link_next"],
                         player_data["url_next"],
                         None,
                         player_data["nid"] + 1,
@@ -236,7 +246,7 @@ class detail:
     def sync_from_web(self, count=sys.maxsize):
         i = 1
         while i < count:
-            self.last_links = self.get_player_data(self.last_links[0])
+            self.last_links = self.get_player_data(self.data["url_header"] + self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
                 print(self.get_nid(self.last_links), self.last_links)
@@ -338,10 +348,13 @@ class mv:
                 short_opt = arg[-1]
                 arg.remove("-c")
                 del arg[-1] 
-            
+                
+            if "-h" in arg:
+                arg = self.hot_mv
 
         if not arg:
             arg = self.mv_list
+
         return short_opt, arg
 
     def name_from_arg(self, arg):
@@ -452,12 +465,12 @@ class mv:
         print("mv --help")
         print("linux:")
         print(
-            "python3 mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
+            "python3 mv.py url,eg: python3 mv.py https://www.ikanxi.com/play/383019-2-1.html"
         )
         print("python3 mv.py sync movie_name, eg: sync 一世独尊")
         print("win:")
         print(
-            "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.kanxiz.com/play/383019-2-1.html"
+            "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.ikanxi.com/play/383019-2-1.html"
         )
         print("your_path/python3.exe mv.py sync movie_name, eg: sync 一世独尊")
         print(

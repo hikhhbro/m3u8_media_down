@@ -28,10 +28,10 @@ win: your_patch/python3.exe mv.py show
 
 ```shell
 1.同步一世独尊第一集到最新一集的视频链接不下载
-python3 mv.py https://www.kanxiz.com/play/383019-2-1.html
+python3 mv.py https://www.ikanxi.com/play/383019-2-1.html
 
 2. 同步一世独尊第一集到最新一集的视频链接 并下载到本地
-python3 mv.py https://www.kanxiz.com/play/383019-2-1.html -d
+python3 mv.py https://www.ikanxi.com/play/383019-2-1.html -d
 
 3.同步本地所有电影到最新一集,不下载 加上-d则下载到最新一集
 python3 mv.py sync
@@ -47,4 +47,4 @@ python3 mv.py show
 
 # 所支持网站
 
-看戏网:https://www.kanxiz.com/
+看戏网:https://www.ikanxi.com/
