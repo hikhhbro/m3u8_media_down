@@ -234,7 +234,7 @@ class detail:
                     else:
                         name = self.name
                     return name , [
-                        url,
+                        player_data["link"],
                         player_data["url"],
                         None,
                         player_data["nid"],
