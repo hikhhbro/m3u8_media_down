@@ -248,8 +248,6 @@ class detail:
     def sync_from_web(self, count=sys.maxsize):
         i = 1
         current_date = datetime.today().date()
-        if "update" not in self.data:
-            self.data["update"] = current_date.strftime("%Y%m%d")
         while i < count:
             self.last_links = self.get_player_data(self.data["url_header"] + self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
