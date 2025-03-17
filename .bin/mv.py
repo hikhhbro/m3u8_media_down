@@ -10,6 +10,7 @@ import time
 from collections import OrderedDict
 from inputimeout import inputimeout, TimeoutOccurred
 import concurrent.futures
+from datetime import datetime, timedelta, date
 
 mv_web = [
     {
@@ -23,6 +24,7 @@ mv_data_json = {
     "activity": 0,  # 观看记录
     "sync": 0,  # 下载集数
     "url_header": "https://www.ikanxi.com",  # 来源网站
+    "update":20250317,
     "period": [],  # 更新时间,[1,5]表示每周一和周五跟新
     "end": 0,  # 完结集数
     "url": [],  # 视频资源链接
@@ -245,15 +247,22 @@ class detail:
 
     def sync_from_web(self, count=sys.maxsize):
         i = 1
+        current_date = datetime.today().date()
+        if "update" not in self.data:
+            self.data["update"] = current_date.strftime("%Y%m%d")
         while i < count:
             self.last_links = self.get_player_data(self.data["url_header"] + self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
                 print(self.get_nid(self.last_links), self.last_links)
                 i = i + 1
+                self.data["update"] = current_date.strftime("%Y%m%d")
             else:
                 break
         self.data_in_json()
+        delta = current_date - datetime.strptime(self.data["update"], "%Y%m%d").date()
+        if delta.days > 7 and self.data["url"][-1][3] - self.data["activity"] == 0:
+            shutil.move(self.dir, bin_dir + "/end/")
 
     def add_download_list(self, url):
 
