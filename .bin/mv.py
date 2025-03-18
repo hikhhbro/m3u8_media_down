@@ -102,7 +102,7 @@ class detail:
         for root, dirs, names in os.walk(self.dir):
             for name in names:
                 name_spl = os.path.splitext(name)
-                if name_spl[1] == ".mp4":
+                if name_spl[1] == ".mp4" or  name_spl[1] == ".ts":
                     local.append(int(name_spl[0][name_spl[0].rfind("第") + 1 : -1]))
 
         if not local:
@@ -232,11 +232,16 @@ class detail:
                     ]
                 else:
                     if "vod_data" in player_data.keys():
-                        name = player_data["vod_data"]["vod_name"]
+                        name = player_data["vod_data"]["vod_name"]    
                     else:
                         name = self.name
+                    
+                    if player_data["sid"] == int(player_data["link"][player_data["link"].rfind("-")-1:player_data["link"].rfind("-")]):
+                        link = player_data["link"]
+                    else:
+                        link = player_data["link"][:player_data["link"].rfind("-")-1] + str(player_data["sid"]) + player_data["link"][player_data["link"].rfind("-"):]
                     return name , [
-                        player_data["link"],
+                        link,
                         player_data["url"],
                         None,
                         player_data["nid"],
