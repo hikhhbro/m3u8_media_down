@@ -11,6 +11,7 @@ from collections import OrderedDict
 from inputimeout import inputimeout, TimeoutOccurred
 import concurrent.futures
 from datetime import datetime, timedelta, date
+from pathlib import Path
 
 mv_web = [
     {
@@ -92,6 +93,13 @@ class detail:
             data = mv_data_json.copy()
             data["url"].append(self.last_links)
         return data
+    
+    def find_filename(self,base_name,directory=bin_dir + '/'):
+        path = Path(directory)
+        for file in path.iterdir():
+            if file.is_file() and file.stem == base_name:
+                return directory+file.name
+        return None
 
     def data_in_json(self):
         with open(self.data_file, "w", encoding="utf-8") as f:
@@ -283,7 +291,7 @@ class detail:
         print(cmd)
         os.system(cmd)
         ds = shutil.move(
-            bin_dir + "/" + self.name + self.get_nid(url) + ".mp4",
+            self.find_filename(self.name + self.get_nid(url)),
             self.dir,
         )
         url[2] = True
