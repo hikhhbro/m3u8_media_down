@@ -25,8 +25,7 @@ mv_data_json = {
     "activity": 0,  # 观看记录
     "sync": 0,  # 下载集数
     "url_header": "https://www.ikanxi.com",  # 来源网站
-    "update":20250317,
-    "period": [],  # 更新时间,[1,5]表示每周一和周五跟新
+    "update":20250317, # 更新时间
     "end": 0,  # 完结集数
     "url": [],  # 视频资源链接
 }
@@ -60,9 +59,6 @@ class detail:
         self.data = self.data_form_json()
         if self.data["url"][-1]:
             self.last_links = self.data["url"][-1]
-
-        # self.data['end'] = 0
-        # self.data_in_json()
         
         self.lock_path = self.dir + '/' + '.lock'
         
@@ -449,7 +445,7 @@ class mv:
                 show_de = True
 
             if short_opt == "-v":
-                l.append(",".join(mv_detail.data["period"]))
+                l.append(mv_detail.data["update"])
                 l.append(mv_detail.data_file)
 
             l.append(",".join([f"{i}" for i in mv_detail.deficiencies]))
@@ -458,7 +454,7 @@ class mv:
         h = ["序号", "名字", "观看记录/已下载/更新/全集"]
 
         if short_opt == "-v":
-            h.append("更新时间/周")
+            h.append("更新时间")
             h.append("配置文件")
 
         if show_de:
