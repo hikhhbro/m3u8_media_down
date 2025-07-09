@@ -16,15 +16,15 @@ from pathlib import Path
 mv_web = [
     {
         "name": "看戏网",
-        "base_url": "https://www.ikanxi.com",
-        "search": "https://www.ikanxi.com/search/-------------.html?wd=%s&submit=",
+        "base_url": "https://www.kanxiw.com",
+        "search": "https://www.kanxiw.com/search/-------------.html?wd=%s&submit=",
     }
 ]
 
 mv_data_json = {
     "activity": 0,  # 观看记录
     "sync": 0,  # 下载集数
-    "url_header": "https://www.ikanxi.com",  # 来源网站
+    "url_header": "https://www.kanxiw.com",  # 来源网站
     "update":20250317, # 更新时间
     "end": 0,  # 完结集数
     "url": [],  # 视频资源链接
@@ -316,7 +316,7 @@ class mv:
             "sync": self.sync,
             "--help": self.help,
             "rm": self.rm,
-            "set": self.set,
+            "follow": self.follow,
         }
         local_mv = [
             d
@@ -367,6 +367,10 @@ class mv:
                 
             if "-h" in arg:
                 arg = self.hot_mv
+                
+            if "-r" in arg:
+                short_opt = "-s"
+                arg.remove("-s")
 
         if not arg:
             arg = self.mv_list
@@ -471,22 +475,31 @@ class mv:
             )
         )
 
-    def set(self, arg):
-        if arg[0] in self.mv_list and arg[0] not in self.hot_mv:
-            self.hot_mv.append(arg[0])
+    def follow(self, arg):
+        short_opt, arg_list = self.arg_parse(arg)
+        if short_opt == '-r':
+            if arg[0].isdigit():
+                del self.hot_mv[int(arg[0])]
+            else:
+                self.hot_mv.remove(arg[0])
             with open(self.mv_json_path, "w", encoding="utf-8") as f:
                 json.dump(self.hot_mv, f, indent=4, sort_keys=True, ensure_ascii=False)
+        else:
+            if arg[0] in self.mv_list and arg[0] not in self.hot_mv:
+                self.hot_mv.append(arg[0])
+                with open(self.mv_json_path, "w", encoding="utf-8") as f:
+                    json.dump(self.hot_mv, f, indent=4, sort_keys=True, ensure_ascii=False)
 
     def help(self, arg):
         print("mv --help")
         print("linux:")
         print(
-            "python3 mv.py url,eg: python3 mv.py https://www.ikanxi.com/play/383019-2-1.html"
+            "python3 mv.py url,eg: python3 mv.py https://www.kanxiw.com/play/383019-2-1.html"
         )
         print("python3 mv.py sync movie_name, eg: sync 一世独尊")
         print("win:")
         print(
-            "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.ikanxi.com/play/383019-2-1.html"
+            "your_path/python3.exe mv.py url,eg: python3 mv.py https://www.kanxiw.com/play/383019-2-1.html"
         )
         print("your_path/python3.exe mv.py sync movie_name, eg: sync 一世独尊")
         print(
