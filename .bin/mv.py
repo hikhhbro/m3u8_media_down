@@ -1,3 +1,4 @@
+#!/home/hikhhbro/.venvs/hik/bin/python3
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -9,7 +10,7 @@ from tabulate import tabulate
 import time
 from collections import OrderedDict
 from inputimeout import inputimeout, TimeoutOccurred
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
@@ -41,8 +42,10 @@ def create_mv_data_json(web_name):
     return 
 
 bin_dir = os.path.dirname(os.path.abspath(__file__))
-mv_dir = os.path.dirname(bin_dir) + "/"
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+mv_dir = os.path.dirname(bin_dir) + "/data/"
+print(mv_dir)
+# mv_dir = bin_dir + "/end/"
+executor = ThreadPoolExecutor(max_workers=10)
 
 class detail:
     fail_retries = 10
@@ -106,8 +109,8 @@ class detail:
         for root, dirs, names in os.walk(self.dir):
             for name in names:
                 name_spl = os.path.splitext(name)
-                if name_spl[1] == ".mp4" or  name_spl[1] == ".ts":
-                    local.append(int(name_spl[0][name_spl[0].rfind("第") + 1 : -1]))
+                if name_spl[-1] == ".mp4" or  name_spl[-1] == ".ts":
+                    local.append(int(name_spl[0][name_spl[0].rfind("E") + 1 :]))
 
         if not local:
             data["activity"] = data["sync"]
@@ -252,7 +255,7 @@ class detail:
                     ]
 
     def get_nid(self, url):
-        return "第" + str(url[3]) + "集"
+        return ".S01E" + str(url[3])
 
     def sync_from_web(self, count=sys.maxsize):
         i = 1
@@ -261,7 +264,7 @@ class detail:
             self.last_links = self.get_player_data(self.data["url_header"] + self.last_links[0])
             if self.last_links[0] and self.last_links[1]:
                 self.data["url"].append(self.last_links)
-                print(self.get_nid(self.last_links), self.last_links)
+                print("第%s集" %(str(self.last_links[3])), self.last_links)
                 i = i + 1
                 self.data["update"] = current_date.strftime("%Y%m%d")
             else:
@@ -269,20 +272,35 @@ class detail:
         self.data_in_json()
         delta = current_date - datetime.strptime(self.data["update"], "%Y%m%d").date()
         if delta.days > 7 and self.data["url"][-1][3] - self.data["activity"] == 0:
-            shutil.move(self.dir, bin_dir + "/end/")
+            try:
+                shutil.move(self.dir, bin_dir + "/end/")
+            except:
+                pass
 
     def add_download_list(self, url):
 
-
-        cmd = (
-            '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
-            % (
-                bin_dir,
-                url[1],
-                bin_dir,
-                self.name + self.get_nid(url),
+        if sys.platform.startswith("win"):
+            cmd = (
+                '%s/N_m3u8DL-CLI_v3.0.2.exe  --maxThreads 128 --minThreads 64 "%s" --enableDelAfterDone  --workDir "%s"  --saveName "%s" '
+                % (
+                    bin_dir,
+                    url[1],
+                    bin_dir,
+                    self.name + self.get_nid(url)
+                )
             )
-        )
+        elif sys.platform.startswith("linux"):
+            cmd = (
+                '%s/N_m3u8DL-RE "%s" --tmp-dir="%s"  --save-name="%s" '
+                % (
+                    bin_dir,
+                    url[1],
+                    bin_dir,
+                    self.name + self.get_nid(url)
+                )
+            )
+        else:
+            print("目前只支持linux和win,暂不支持其他系统")
 
         print(cmd)
         os.system(cmd)
@@ -299,13 +317,18 @@ class detail:
     def download(self):
         for url in self.data["url"]:
             if not url[2]:
-                executor.submit(self.add_download_list,url)
+                future= executor.submit(self.add_download_list,url)
+                # try:
+                #     result = future.result()
+                # except Exception as e:
+                #     print(f"Task generated an exception: {e}")
             elif url[3] in self.deficiencies[:]:
                 if self.add_download_list(url):
                     self.deficiencies.remove(url[3])
             else:
                 # print(self.get_nid(url), "已经下载,跳过")
                 pass
+        
 
 
 class mv:
@@ -419,7 +442,6 @@ class mv:
 
             if short_opt == "-s":
                 mv_detail.data_in_json()
-
             sync_rec = (
                 str(mv_detail.data["activity"])
                 + "/"
@@ -532,5 +554,15 @@ class mv:
 
 
 if __name__ == "__main__":
-
+    time_start = datetime.now()
+    print("开始执行   %s" %(time_start.strftime('%Y-%m-%d %H:%M:%S')))
     mv().run(sys.argv)
+    time_end = datetime.now()
+    time_elapsed = (time_end - time_start).seconds
+    if time_elapsed < 60:
+        unit = "秒"
+    else :
+        time_elapsed = time_elapsed / 60.0
+        unit = "分"
+         
+    print("执行结束   %s  总耗时:%.1f%s" %(time_end.strftime('%Y-%m-%d %H:%M:%S'), time_elapsed,unit))

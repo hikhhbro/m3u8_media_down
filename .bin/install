@@ -1,0 +1,13 @@
+# mkdir -p ~/.venvs
+# python3 -m venv ~/.venvs/
+
+~/.venvs/hik/bin/python3 -m pip install requests
+~/.venvs/hik/bin/python3 -m pip install bs4
+~/.venvs/hik/bin/python3 -m pip install shutil
+~/.venvs/hik/bin/python3 -m pip install tabulate
+~/.venvs/hik/bin/python3 -m pip install time
+~/.venvs/hik/bin/python3 -m pip install collections
+~/.venvs/hik/bin/python3 -m pip install inputimeout
+~/.venvs/hik/bin/python3 -m pip install datetime
+~/.venvs/hik/bin/python3 -m pip install pathlib
+~/.venvs/hik/bin/python3 -m pip install wcwidth
