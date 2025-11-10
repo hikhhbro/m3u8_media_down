@@ -291,12 +291,13 @@ class detail:
             )
         elif sys.platform.startswith("linux"):
             cmd = (
-                '%s/N_m3u8DL-RE "%s" --tmp-dir="%s"  --save-name="%s" '
+                '%s/N_m3u8DL-RE "%s" --tmp-dir="%s"  --save-name="%s" --save-dir="%s"'
                 % (
                     bin_dir,
                     url[1],
                     bin_dir,
-                    self.name + self.get_nid(url)
+                    self.name + self.get_nid(url),
+                    self.dir
                 )
             )
         else:
@@ -304,10 +305,6 @@ class detail:
 
         print(cmd)
         os.system(cmd)
-        ds = shutil.move(
-            self.find_filename(self.name + self.get_nid(url)),
-            self.dir,
-        )
         url[2] = True
         if self.data["sync"] < url[3] : 
             self.data["sync"] = url[3]
